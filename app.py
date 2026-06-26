@@ -11,103 +11,146 @@ st.set_page_config(page_title="Quiniela Mundialista Oficina", layout="wide")
 
 st.title("🏆 App Web del Mundial")
 st.write("Suerte amigos :3")
+
+# --- 🟢 COPIA Y PEGA AQUÍ EL ENLACE DE TU GOOGLE SHEET 🟢 ---
+URL_HOJA_CALCULO = "https://docs.google.com/spreadsheets/d/1Z0LT1Kt_AOnumF_XM0LQcWyXdDGMB1TRzdQ0WiVK2BU/edit?usp=sharing"
+
+# Lista de personas con beneficio de desempate (+0.1 puntos invisibles)
+PERSONAS_DESEMPATE = [
+    "noel guerrero", 
+    "ricardo avila", 
+    "pablo", 
+    "ivan", 
+    "raul quintero fernandez", 
+    "karla", 
+    "ulises cruz porchini"
+]
 #%%
-# --- CONFIGURACIÓN DE LA API ---
-# --- DICCIONARIO TRADUCTOR (Para que el sistema entienda Español/Inglés y acentos) ---
+# Función para transformar el enlace normal en un enlace de descarga CSV para Pandas
+def obtener_url_csv(url, pestaña):
+    try:
+        base_url = url.split("/edit")[0]
+        return f"{base_url}/gviz/tq?tqx=out:csv&sheet={pestaña}"
+    except:
+        return ""
+    
+URL_ELECCIONES = obtener_url_csv(URL_HOJA_CALCULO, "elecciones")
+URL_RESULTADOS = obtener_url_csv(URL_HOJA_CALCULO, "resultados")
+
 def normalizar_nombre(nombre_equipo):
     nombre_equipo = str(nombre_equipo).strip().lower()
-    # Quitar acentos comunes por si escriben México o España
     reemplazos = {"é": "e", "á": "a", "í": "i", "ó": "o", "ú": "u"}
     for original, reemplazo in reemplazos.items():
         nombre_equipo = nombre_equipo.replace(original, reemplazo)
     return nombre_equipo
 
-
-# --- PANEL DE ADMINISTRACIÓN EN LA BARRA LATERAL ---
-st.sidebar.header("⚙️ Panel de Administración (No Tocar)")
-st.sidebar.write("Selecciona los equipos que vayan clasificando en cada fase:")
-
-# Cargar el Excel primero para saber qué equipos existen
-try:
-    df_elecciones = pd.read_excel("Quiniela.xlsx")
-    
-    # Extraemos todos los equipos únicos que la gente escribió en el Excel para que no tengas que escribirlos tú
-    todos_los_equipos = set()
-    for col in df_elecciones.columns[1:9]:
-        for eq in df_elecciones[col].dropna():
-            todos_los_equipos.add(str(eq).strip())
-    lista_equipos_ordenada = sorted(list(todos_los_equipos))
-except Exception as e:
-    st.error("No se pudo cargar 'Quiniela.xlsx'. Asegúrate de que esté en la misma carpeta.")
-    st.stop()
-
-# Selectores múltiples en la barra lateral para el Administrador
-dieciseisavos = st.sidebar.multiselect("⚽ Clasificados a Dieciseisavos de Final (1 pt)", lista_equipos_ordenada)
-octavos = st.sidebar.multiselect("⭐ Clasificados a Octavos de Final (2 pts)", lista_equipos_ordenada)
-cuartos = st.sidebar.multiselect("🔥 Clasificados a Cuarto de Final (3 pts)", lista_equipos_ordenada)
-semis = st.sidebar.multiselect("👑 Clasificados a la Seminifla Final (4 pts)", lista_equipos_ordenada)
-finalistas = st.sidebar.multiselect("👑 Clasificados a la Gran Final (5 pts)", lista_equipos_ordenada)
-
-
-# --- PROCESAMIENTO DE PUNTOS MANUALES ---
+#%%
+# --- 1. LEER LOS RESULTADOS DEL ADMINISTRADOR DESDE GOOGLE SHEETS ---
 puntos_por_equipo = {}
 
-# Asignar puntos acumulados (Si llegó a la final tiene 4, si llegó a semis tiene 3, etc.)
-for eq in dieciseisavos:
-    puntos_por_equipo[normalizar_nombre(eq)] = 1
-for eq in octavos:
-    puntos_por_equipo[normalizar_nombre(eq)] = 2
-for eq in cuartos:
-    puntos_por_equipo[normalizar_nombre(eq)] = 3
-for eq in semis:
-    puntos_por_equipo[normalizar_nombre(eq)] = 4
-for eq in finalistas:
-    puntos_por_equipo[normalizar_nombre(eq)] = 5
+try:
+    # Leemos la pestaña de resultados directamente de internet
+    df_resultados = pd.read_csv(URL_RESULTADOS)
+    
+    # Recorremos el tablero fila por fila (un equipo por celda)
+    for index, row in df_resultados.iterrows():
+        fase = str(row['Fase']).strip().lower()
+        equipo = str(row['Equipo']).strip() # Lee la celda del equipo único
+        
+        # Si la celda no está vacía, procesamos
+        if equipo and equipo != "nan":
+            eq_normalizado = normalizar_nombre(equipo)
+            
+            # Asignamos los puntos correspondientes según la fase escrita en la columna A
+            if "dieciseisavos" in fase: puntos = 1
+            elif "octavos" in fase: puntos = 2
+            elif "cuartos" in fase: puntos = 3
+            elif "semis" in fase: puntos = 4
+            elif "final" in fase: puntos = 5
+            else: puntos = 0
+            
+            # Guardamos el puntaje más alto asignado a ese equipo
+            if puntos > 0:
+                if eq_normalizado in puntos_por_equipo:
+                    if puntos > puntos_por_equipo[eq_normalizado]:
+                        puntos_por_equipo[eq_normalizado] = puntos
+                else:
+                    puntos_por_equipo[eq_normalizado] = puntos
+                    
+except Exception as e:
+    st.error("Esperando configuración correcta de la pestaña 'resultados' en Google Sheets...")
 
-# --- CÁLCULO DEL RANKING EN TIEMPO REAL ---
+
+#%%
+# --- 2. CARGAR LAS ELECCIONES DESDE GOOGLE SHEETS ---
+try:
+    df_elecciones = pd.read_csv(URL_ELECCIONES)
+except Exception as e:
+    st.error("No se pudo conectar a la pestaña 'elecciones' de Google Sheets. Verifica el enlace compartido.")
+    st.stop()
+
+#%%
+# --- 3. CÁLCULO DEL RANKING CON DESEMPATE INVISIBLE ---
 ranking = []
 
 for index, row in df_elecciones.iterrows():
-    nombre = row['Nombre']
-    # Tomamos las 8 elecciones de la persona
+    nombre_original = str(row['Nombre']).strip()
+    nombre_normalizado = normalizar_nombre(nombre_original)
+    
     equipos_elegidos = [normalizar_nombre(row[col]) for col in df_elecciones.columns[1:9]]
     
+    # Puntos base ganados por los equipos elegidos
     puntos_totales = 0
     for eq in equipos_elegidos:
-        # Suma los puntos si el equipo tiene un valor asignado por el administrador
         puntos_totales += puntos_por_equipo.get(eq, 0)
+    
+    # 🤫 CRITERIO SECRETO: Si la persona está en la lista de desempate, le sumamos 0.1 de forma interna
+    if nombre_normalizado in PERSONAS_DESEMPATE:
+        puntos_totales += 0.1
         
-    ranking.append({"Nombre": nombre, "Puntos": puntos_totales})
+    ranking.append({"Nombre": nombre_original, "Puntos": puntos_totales})
 
-# Ordenar el ranking de mayor a menor
+# Ordenamos de mayor a menor (aquí los decimales 0.1 hacen que ganen la posición superior)
 df_ranking = pd.DataFrame(ranking).sort_values(by="Puntos", ascending=False).reset_index(drop=True)
-#%%
-# Cambiar el índice para que empiece en 1 en lugar de 0
 df_ranking.index = df_ranking.index + 1
-#%%
-# --- INTERFAZ VISUAL PRINCIPAL ---
 
-# Formato destacado para los 3 primeros lugares
-st.header("📊 Tabla de Posiciones (Ranking Live)")
+# 👁️ TRUCO VISUAL: Convertimos la columna a números enteros antes de mostrar la tabla, borrando el .1
+df_ranking_visual = df_ranking.copy()
+df_ranking_visual["Puntos"] = df_ranking_visual["Puntos"].astype(int)
+
+#%%
+# --- INTERFAZ VISUAL ---
+st.header("📊 Tabla de Posiciones")
+# Formato destacado para las tarjetas superiores (también ocultando el decimal)
 col1, col2, col3 = st.columns(3)
 if len(df_ranking) > 0 and df_ranking.iloc[0]['Puntos'] > 0:
-    with col1:
-        st.metric(label="🥇 1er Lugar", value=df_ranking.iloc[0]['Nombre'], delta=f"{df_ranking.iloc[0]['Puntos']} pts")
+    with col1: st.metric(label="🥇 1er Lugar", value=df_ranking.iloc[0]['Nombre'], delta=f"{int(df_ranking.iloc[0]['Puntos'])} pts")
 if len(df_ranking) > 1 and df_ranking.iloc[1]['Puntos'] > 0:
-    with col2:
-        st.metric(label="🥈 2do Lugar", value=df_ranking.iloc[1]['Nombre'], delta=f"{df_ranking.iloc[1]['Puntos']} pts")
+    with col2: st.metric(label="🥈 2do Lugar", value=df_ranking.iloc[1]['Nombre'], delta=f"{int(df_ranking.iloc[1]['Puntos'])} pts")
 if len(df_ranking) > 2 and df_ranking.iloc[2]['Puntos'] > 0:
-    with col3:
-        st.metric(label="🥉 3er Lugar", value=df_ranking.iloc[2]['Nombre'], delta=f"{df_ranking.iloc[2]['Puntos']} pts")
+    with col3: st.metric(label="🥉 3er Lugar", value=df_ranking.iloc[2]['Nombre'], delta=f"{int(df_ranking.iloc[2]['Puntos'])} pts")
 
-# Mostrar la tabla de posiciones completa
-st.dataframe(df_ranking, use_container_width=True)
+# Mostramos la tabla limpia sin decimales
+st.dataframe(df_ranking_visual, use_container_width=True)
+
 
 st.markdown("---")
-
-# Mostrar el Excel original
 st.header("📋 Elecciones de los Participantes")
 st.dataframe(df_elecciones, use_container_width=True)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
