@@ -63,10 +63,10 @@ try:
             
             # Asignamos los puntos correspondientes según la fase escrita en la columna A
             if "dieciseisavos" in fase: puntos = 1
-            elif "octavos" in fase: puntos = 2
-            elif "cuartos" in fase: puntos = 3
-            elif "semis" in fase: puntos = 4
-            elif "final" in fase: puntos = 5
+            elif "octavos" in fase: puntos = 3
+            elif "cuartos" in fase: puntos = 6
+            elif "semis" in fase: puntos = 10
+            elif "final" in fase: puntos = 15
             else: puntos = 0
             
             # Guardamos el puntaje más alto asignado a ese equipo
