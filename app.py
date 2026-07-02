@@ -36,6 +36,7 @@ def obtener_url_csv(url, pestaña):
     
 URL_ELECCIONES = obtener_url_csv(URL_HOJA_CALCULO, "elecciones")
 URL_RESULTADOS = obtener_url_csv(URL_HOJA_CALCULO, "resultados")
+URL_ESTATUS = obtener_url_csv(URL_HOJA_CALCULO, "estatus") # Nueva pestaña de estatus
 
 def normalizar_nombre(nombre_equipo):
     nombre_equipo = str(nombre_equipo).strip().lower()
@@ -45,7 +46,23 @@ def normalizar_nombre(nombre_equipo):
     return nombre_equipo
 
 #%%
-# --- 1. LEER LOS RESULTADOS DEL ADMINISTRADOR DESDE GOOGLE SHEETS ---
+
+# --- 1. LEER LOS EQUIPOS ELIMINADOS DESDE GOOGLE SHEETS ---
+equipos_eliminados = set()
+
+try:
+    df_estatus = pd.read_csv(URL_ESTATUS)
+    for index, row in df_estatus.iterrows():
+        estatus = str(row['Estatus']).strip().lower()
+        equipo = str(row['Equipos']).strip()
+        
+        if equipo and equipo != "nan" and estatus == "eliminado":
+            equipos_eliminados.add(normalizar_nombre(equipo))
+except Exception as e:
+    # Si aún no creas la pestaña, no romperá la app, solo continuará sin tachar nada
+    pass
+
+# --- 2. LEER LOS RESULTADOS DEL ADMINISTRADOR DESDE GOOGLE SHEETS ---
 puntos_por_equipo = {}
 
 try:
@@ -82,7 +99,7 @@ except Exception as e:
 
 
 #%%
-# --- 2. CARGAR LAS ELECCIONES DESDE GOOGLE SHEETS ---
+# --- 3. CARGAR LAS ELECCIONES DESDE GOOGLE SHEETS ---
 try:
     df_elecciones = pd.read_csv(URL_ELECCIONES)
 except Exception as e:
@@ -90,7 +107,7 @@ except Exception as e:
     st.stop()
 
 #%%
-# --- 3. CÁLCULO DEL RANKING CON DESEMPATE INVISIBLE ---
+# --- 4. CÁLCULO DEL RANKING CON DESEMPATE INVISIBLE ---
 ranking = []
 
 for index, row in df_elecciones.iterrows():
@@ -136,8 +153,25 @@ st.dataframe(df_ranking_visual, use_container_width=True)
 
 st.markdown("---")
 st.header("📋 Elecciones de los Participantes")
-st.dataframe(df_elecciones, use_container_width=True)
 
+# 🎨 TRUCO VISUAL: Aplicamos formato HTML para tachar y poner en rojo los eliminados
+df_elecciones_visual = df_elecciones.copy()
+
+# Recorremos cada una de las columnas de los equipos (de la 1 a la 8)
+for col in df_elecciones_visual.columns[1:9]:
+    def formatear_eliminado(nombre_equipo):
+        if pd.isna(nombre_equipo):
+            return nombre_equipo
+        eq_norm = normalizar_nombre(nombre_equipo)
+        if eq_norm in equipos_eliminados:
+            # Retorna el texto encerrado en etiquetas HTML de color rojo y tachado
+            return f'<span style="color: red; text-decoration: line-through;">{nombre_equipo}</span>'
+        return nombre_equipo
+
+    df_elecciones_visual[col] = df_elecciones_visual[col].apply(formatear_eliminado)
+
+# Mostramos la tabla permitiendo que Streamlit interprete el código HTML interactivo
+st.write(df_elecciones_visual.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 
 
