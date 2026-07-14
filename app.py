@@ -83,7 +83,9 @@ try:
             elif "octavos" in fase: puntos = 3
             elif "cuartos" in fase: puntos = 6
             elif "semis" in fase: puntos = 10
-            elif "final" in fase: puntos = 15
+            elif "tercer_lugar" in fase: puntos = 15
+            elif "subcapeon" in fase: puntos = 16
+            elif "campeon_mundial" in fase: puntos = 17
             else: puntos = 0
             
             # Guardamos el puntaje más alto asignado a ese equipo
