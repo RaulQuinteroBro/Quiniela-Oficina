@@ -135,7 +135,7 @@ df_ranking.index = df_ranking.index + 1
 
 # 👁️ TRUCO VISUAL: Convertimos la columna a números enteros antes de mostrar la tabla, borrando el .1
 df_ranking_visual = df_ranking.copy()
-df_ranking_visual["Puntos"] = df_ranking_visual["Puntos"].astype(int)
+#df_ranking_visual["Puntos"] = df_ranking_visual["Puntos"].astype(int)
 
 #%%
 # --- INTERFAZ VISUAL ---
